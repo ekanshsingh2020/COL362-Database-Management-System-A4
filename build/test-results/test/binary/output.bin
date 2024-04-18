@@ -1,0 +1,432 @@
+<rel#4:LogicalProject.NONE(input=LogicalFilter#2,exprs=[$1])
+$===================================
+	PProject
+$===================================
+PProject opened
+PFilter opened
+No more rows in PFilter
+No more rows in PProject
+Closing PProject
+PFilter closed
+49
+Test passed :)
+$===================================
+
+
+
+Done with Filter and Project
+
+
+
+PSort opened
+PProject opened
+No more rows in PProject
+Sorting the list
+No more rows in PSort
+Closing PSort
+Closing PProject
+Test passed :)
+$===================================
+PSort
+$===================================
+PSort opened
+PProject opened
+PFilter opened
+PProject opened
+PFilter opened
+No more rows in PFilter
+No more rows in PProject
+No more rows in PFilter
+No more rows in PProject
+Sorting the list
+No more rows in PSort
+Closing PSort
+Closing PProject
+PFilter closed
+Closing PProject
+PFilter closed
+7
+Test passed :)
+$===================================
+	PProject
+$===================================
+PProject opened
+PFilter opened
+No more rows in PFilter
+No more rows in PProject
+Closing PProject
+PFilter closed
+1000
+Test passed :)
+$===================================
+PSort
+$===================================
+PSort opened
+PAggregate opened
+{0}
+
+[AVG($1)]
+	PProject
+GroupBySet [0]
+PProject opened
+No more rows in PProject
+599
+No more rows in PAggregate
+Sorting the list
+No more rows in PSort
+Closing PSort
+Closing PAggregate
+Closing PProject
+599
+Test passed :)
+$===================================
+	PProject
+$===================================
+PProject opened
+PFilter opened
+PJoin opened
+No condition
+PJoin opened
+No condition
+No more rows in PJoin
+No more rows in PJoin
+No more rows in PFilter
+No more rows in PProject
+Closing PProject
+PFilter closed
+Closing PJoin
+Closing PJoin
+64
+Test passed :)
+$===================================
+	PProject
+$===================================
+PProject opened
+PJoin opened
+Map size 599
+16044
+No more rows in PJoin
+No more rows in PProject
+Closing PProject
+Closing PJoin
+16044
+Test passed :)
+	$===================================
+	PSort
+	$===================================
+	PSort opened
+	PAggregate opened
+	{0}
+	
+[SUM($1)]
+		PProject
+	GroupBySet [0]
+	PProject opened
+	No more rows in PProject
+	599
+	No more rows in PAggregate
+	Sorting the list
+	No more rows in PSort
+	Closing PSort
+	Closing PAggregate
+	Closing PProject
+	599
+	Test passed :)
+
+$===================================
+
+PSort
+
+$===================================
+
+PSort opened
+
+PAggregate opened
+
+{0}
+
+[COUNT($0)]
+
+	PProject
+
+GroupBySet [0]
+
+PProject opened
+
+PJoin opened
+
+Map size 4580
+
+No more rows in PJoin
+
+No more rows in PProject
+
+958
+
+No more rows in PAggregate
+
+Sorting the list
+
+No more rows in PSort
+
+Closing PSort
+
+Closing PAggregate
+
+Closing PProject
+
+Closing PJoin
+
+958
+
+Test passed :)
+$===================================
+PAggregate
+$===================================
+PAggregate opened
+{0}
+[COUNT($1)]
+	PProject
+GroupBySet [0]
+PProject opened
+PJoin opened
+Map size 16
+1000
+No more rows in PJoin
+No more rows in PProject
+16
+No more rows in PAggregate
+Closing PAggregate
+Closing PProject
+Closing PJoin
+16
+Test passed :)
+$===================================
+PAggregate
+$===================================
+PAggregate opened
+{0}
+[COUNT($1)]
+	PProject
+GroupBySet [0]
+PProject opened
+PFilter opened
+PJoin opened
+No condition
+PJoin opened
+No condition
+No more rows in PJoin
+No more rows in PJoin
+No more rows in PFilter
+No more rows in PProject
+16
+No more rows in PAggregate
+Closing PAggregate
+Closing PProject
+PFilter closed
+Closing PJoin
+Closing PJoin
+16
+Test passed :)
+$===================================
+PSort
+$===================================
+PSort opened
+PAggregate opened
+{0}
+[COUNT($0)]
+	PProject
+GroupBySet [0]
+PProject opened
+PJoin opened
+Map size 4580
+No more rows in PJoin
+No more rows in PProject
+958
+No more rows in PAggregate
+Sorting the list
+No more rows in PSort
+Closing PSort
+Closing PAggregate
+Closing PProject
+Closing PJoin
+958
+Test passed :)
+$===================================
+
+
+
+&Done with Join and Aggregate and Sort
+
+
+
+­java.lang.RuntimeException: org.apache.calcite.runtime.CalciteContextException: From line 1, column 118 to line 1, column 125: Column 'ACTOR_ID' not found in table 'rental'
+‘org.apache.calcite.runtime.CalciteContextException: From line 1, column 118 to line 1, column 125: Column 'ACTOR_ID' not found in table 'rental'
+$===================================
+PAggregate
+$===================================
+PAggregate opened
+{0}
+
+[AVG($1)]
+	PProject
+GroupBySet [0]
+PProject opened
+PJoin opened
+PJoin opened
+Map size 16
+No more rows in PJoin
+Map size 1000
+No more rows in PJoin
+No more rows in PProject
+16
+No more rows in PAggregate
+Closing PAggregate
+Closing PProject
+Closing PJoin
+Closing PJoin
+16
+Test passed :)
+$===================================
+PSort
+$===================================
+PSort opened
+PAggregate opened
+
+{0, 1, 2}
+
+[COUNT()]
+	PProject
+GroupBySet [0, 1, 2]
+PProject opened
+PJoin opened
+Map size 200
+No more rows in PJoin
+No more rows in PProject
+200
+No more rows in PAggregate
+Sorting the list
+No more rows in PSort
+Closing PSort
+Closing PAggregate
+Closing PProject
+Closing PJoin
+200
+Test passed :)
+$===================================
+PFilter
+$===================================
+PFilter opened
+PAggregate opened
+{0}
+
+[COUNT()]
+	PProject
+GroupBySet [0]
+PProject opened
+No more rows in PProject
+128
+No more rows in PAggregate
+No more rows in PFilter
+PFilter closed
+Closing PAggregate
+Closing PProject
+52
+Test passed :)
+ILogicalSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[30])
+#  LogicalAggregate(group=[{0, 1}])
+4    LogicalProject(FIRST_NAME=[$1], LAST_NAME=[$6])
+K      LogicalJoin(condition=[AND(=($1, $5), =($2, $6))], joinType=[inner])
+-        PTableScan(table=[[FILM_DB, actor]])
+-        PTableScan(table=[[FILM_DB, actor]])
+
+$===================================
+PSort
+$===================================
+PSort opened
+PAggregate opened
+{0, 1}
+[]
+	PProject
+GroupBySet [0, 1]
+PProject opened
+PJoin opened
+AND condition
+Map size 199
+No more rows in PJoin
+No more rows in PProject
+199
+No more rows in PAggregate
+Sorting the list
+No more rows in PSort
+Closing PSort
+Closing PAggregate
+Closing PProject
+Closing PJoin
+30
+Test passed :)
+$===================================
+PSort
+$===================================
+PSort opened
+PAggregate opened
+{0}
+[]
+	PProject
+GroupBySet [0]
+PProject opened
+PFilter opened
+PJoin opened
+PJoin opened
+Map size 1000
+4623
+No more rows in PJoin
+Map size 4582
+16087
+No more rows in PJoin
+No more rows in PFilter
+No more rows in PProject
+958
+No more rows in PAggregate
+Sorting the list
+No more rows in PSort
+Closing PSort
+Closing PAggregate
+Closing PProject
+PFilter closed
+Closing PJoin
+Closing PJoin
+10
+Test passed :)
+$===================================
+PAggregate
+$===================================
+PAggregate opened
+{0}
+[]
+	PProject
+GroupBySet [0]
+PProject opened
+No more rows in PProject
+4580
+No more rows in PAggregate
+Closing PAggregate
+Closing PProject
+4580
+Test passed :)
+$===================================
+PAggregate
+$===================================
+PAggregate opened
+{0}
+[]
+	PProject
+GroupBySet [0]
+PProject opened
+No more rows in PProject
+4580
+No more rows in PAggregate
+Closing PAggregate
+Closing PProject
+4580
+Test passed :)

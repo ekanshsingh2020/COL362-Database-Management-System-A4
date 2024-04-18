@@ -1,0 +1,2 @@
+- Make comparator in sort
+- Handle null values everywhere

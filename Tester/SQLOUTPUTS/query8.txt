@@ -1,0 +1,16 @@
+Family	69
+Games	61
+Animation	66
+Classics	57
+Documentary	68
+New	63
+Sports	74
+Children	60
+Music	51
+Travel	57
+Foreign	73
+Drama	62
+Horror	56
+Action	64
+Sci-Fi	61
+Comedy	58
