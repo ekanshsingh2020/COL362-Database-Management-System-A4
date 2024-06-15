@@ -1,0 +1,3 @@
+payment_id:int,customer_id:int,staff_id:int,rental_id:int,amount:double,payment_date
+18602,27,2,1480,4.99,2007-02-15 19:45:43.996577
+18605,27,2,259,2.99,2007-02-18 22:17:13.996577
