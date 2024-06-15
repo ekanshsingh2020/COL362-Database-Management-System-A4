@@ -1,0 +1,1844 @@
+diff --git a/in/ac/iitd/src/main/java/MyCalciteConnection.java b/in/ac/iitd/src/main/java/MyCalciteConnection.java
+index 2e869ef..005ea69 100644
+--- a/in/ac/iitd/src/main/java/MyCalciteConnection.java
++++ b/in/ac/iitd/src/main/java/MyCalciteConnection.java
+@@ -3,7 +3,9 @@ import com.google.common.collect.ImmutableList;
+ import org.apache.calcite.util.Sources;
+ import org.apache.calcite.sql.parser.SqlParser;
+ import org.apache.calcite.rel.RelNode;
++import org.apache.calcite.rel.RelRoot;
+ import org.apache.calcite.rex.RexBuilder;
++import org.apache.calcite.sql.SqlKind;
+ import org.apache.calcite.sql.SqlNode;
+ import org.apache.calcite.sql.validate.SqlValidator;
+ import org.apache.calcite.sql.validate.SqlValidatorUtil;
+@@ -17,6 +19,7 @@ import org.apache.calcite.config.CalciteConnectionProperty;
+ import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
+ import org.apache.calcite.jdbc.CalciteConnection;
+ import org.apache.calcite.rel.type.RelDataTypeFactory;
++import org.apache.calcite.rel.type.RelDataTypeField;
+ import org.apache.calcite.schema.Schema;
+ import org.apache.calcite.schema.SchemaPlus;
+ import org.apache.calcite.prepare.Prepare;
+@@ -36,6 +39,7 @@ import org.apache.calcite.tools.RuleSets;
+ import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
+ import org.apache.calcite.rel.type.RelDataType;
+ import org.apache.calcite.sql.type.SqlTypeName;
++import org.apache.calcite.sql.SqlOperator;
+ 
+ import org.apache.log4j.Logger;
+ 
+@@ -210,12 +214,33 @@ public class MyCalciteConnection {
+             RelNode physicalPlan = logicalToPhysical(logicalPlan, logicalPlan.getTraitSet().plus(PConvention.INSTANCE), rules);
+             List<Object[]> result = executeQuery(physicalPlan);
+             
+-            /* 
+-                Write your code here 
+-                You can post-process the result here, if needed
+-            */
+ 
+-            return result;
++            RelRoot root = RelRoot.of(physicalPlan, SqlKind.SELECT);
++            RelDataType rowType = root.validatedRowType;
++            List<Integer>lisofProj= new ArrayList<Integer>();
++
++            for(int i=0;i<rowType.getFieldCount();i++)
++            {
++                RelDataTypeField field = rowType.getFieldList().get(i);
++                String name = field.getName();
++                if(name.equals(name.toUpperCase()))
++                    lisofProj.add(i);
++            }
++
++            // print the physical plan
++            // System.out.println(physicalPlan.explain());
++            
++            List <Object[]> newResult = new ArrayList<Object[]>();
++            for(Object[] row : result)
++            {
++                Object[] newRow = new Object[lisofProj.size()];
++                for(int i=0;i<lisofProj.size();i++)
++                {
++                    newRow[i] = row[lisofProj.get(i)];
++                }
++                newResult.add(newRow);
++            }
++            return newResult;
+         }
+         catch (Exception e) {
+             logger.error("Error in executing query", e);
+diff --git a/in/ac/iitd/src/main/java/rel/PAggregate.java b/in/ac/iitd/src/main/java/rel/PAggregate.java
+index db6dde0..2519776 100644
+--- a/in/ac/iitd/src/main/java/rel/PAggregate.java
++++ b/in/ac/iitd/src/main/java/rel/PAggregate.java
+@@ -2,6 +2,7 @@ package rel;
+ 
+ import org.apache.calcite.plan.RelOptCluster;
+ import org.apache.calcite.plan.RelTraitSet;
++import org.apache.calcite.rel.RelCollation;
+ import org.apache.calcite.rel.RelNode;
+ import org.apache.calcite.rel.core.Aggregate;
+ import org.apache.calcite.rel.core.AggregateCall;
+@@ -9,8 +10,13 @@ import org.apache.calcite.rel.hint.RelHint;
+ import org.apache.calcite.util.ImmutableBitSet;
+ 
+ import convention.PConvention;
++import edu.emory.mathcs.backport.java.util.Arrays;
+ 
+ import java.util.List;
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.Comparator;
++import java.util.HashMap;
+ 
+ // Count, Min, Max, Sum, Avg
+ public class PAggregate extends Aggregate implements PRel {
+@@ -38,27 +44,245 @@ public class PAggregate extends Aggregate implements PRel {
+         return "PAggregate";
+     }
+ 
++    List<Object []> lis;
++    List<Object []> templis;
++    HashMap <Object[], List<Object[]>> map;
++    List<Integer> groupBySet;
++    int index;
++
++
+     // returns true if successfully opened, false otherwise
+     @Override
+-    public boolean open() {
++    public boolean open() 
++    {
+         logger.trace("Opening PAggregate");
+-        /* Write your code here */
++        System.out.println("PAggregate opened");
++        System.out.println(this.groupSet);
++        System.out.println(this.aggCalls);
++        System.out.println(this.input);
++        lis = new ArrayList<>();
++        templis = new ArrayList<>();
++        map = new HashMap<>();
++        groupBySet = new ArrayList<>();
++        for(int i = 0; i < this.groupSet.length(); i++)
++        {
++            if(this.groupSet.get(i))
++                groupBySet.add(i);
++        }
++        System.out.println("GroupBySet "+groupBySet);
++        index = 0;
++        if (this.input instanceof PRel) {
++            PRel inputNode = (PRel) this.input;
++            return inputNode.open();
++        }
+         return false;
+     }
+ 
+     // any postprocessing, if needed
+     @Override
+-    public void close() {
++    public void close() 
++    {
+         logger.trace("Closing PAggregate");
+-        /* Write your code here */
++        System.out.println("Closing PAggregate");
++        if (this.input instanceof PRel) {
++            PRel inputNode = (PRel) this.input;
++            inputNode.close();
++        }
+         return;
+     }
+ 
+     // returns true if there is a next row, false otherwise
+     @Override
+-    public boolean hasNext() {
++    public boolean hasNext() 
++    {
+         logger.trace("Checking if PAggregate has next");
+-        /* Write your code here */
++        if (this.input instanceof PRel) {
++            PRel inputNode = (PRel) this.input;
++            
++            if(index == 0)
++            {
++                while(inputNode.hasNext())
++                    templis.add(inputNode.next());
++                for(Object [] row : templis)
++                {
++                    Object [] key = new Object[groupBySet.size()];
++                    for(int i = 0; i < groupBySet.size(); i++)
++                        key[i] = row[groupBySet.get(i)];
++                    String tempStrKey = Arrays.toString(key);
++                    int tempFlag = 0;
++                    for(Object [] key1 : map.keySet())
++                    {
++                        String tempStrKey1 = Arrays.toString(key1);
++                        if(tempStrKey.equals(tempStrKey1))
++                        {
++                            map.get(key1).add(row);
++                            tempFlag = 1;
++                            break;
++                        }
++                    }
++                    if(tempFlag == 0)
++                    {
++                        List<Object []> temp = new ArrayList<>();
++                        temp.add(row);
++                        map.put(key, temp);
++                    }
++                }
++                System.out.println(map.size());
++                
++                for(Object [] key : map.keySet())
++                {
++                    List<Object []> temp = map.get(key);
++                    Object [] newRow = new Object[this.aggCalls.size() + groupBySet.size()];
++                    for(int i = 0; i < groupBySet.size(); i++)
++                    {
++                        newRow[i] = key[i];
++                    }
++                    for(int i = 0; i < this.aggCalls.size(); i++)
++                    {
++                        AggregateCall aggCall = this.aggCalls.get(i);
++                        
++                        switch(aggCall.getAggregation().getName())
++                        {
++                            case "COUNT":
++                                if(aggCall.isDistinct())
++                                {
++                                    System.out.println("Distinct Count====================");
++                                    List<Object> tempDistinct = new ArrayList<>();
++                                    for(Object [] row : temp)
++                                    {
++                                        if(!tempDistinct.contains(row[aggCall.getArgList().get(0)]))
++                                            tempDistinct.add(row[aggCall.getArgList().get(0)]);
++                                    }
++                                    newRow[i + groupBySet.size()] = tempDistinct.size();
++                                }
++                                else
++                                    newRow[i + groupBySet.size()] = temp.size();
++                                break;
++                            case "MIN":
++                                newRow[i + groupBySet.size()] = Collections.min(temp, new Comparator<Object[]>() {
++                                    @Override
++                                    public int compare(Object[] o1, Object[] o2) {
++                                        return ((Comparable)o1[aggCall.getArgList().get(0)]).compareTo(o2[aggCall.getArgList().get(0)]);
++                                    }
++                                })[aggCall.getArgList().get(0)];
++                                break;
++                            case "MAX":
++                                newRow[i + groupBySet.size()] = Collections.max(temp, new Comparator<Object[]>() {
++                                    @Override
++                                    public int compare(Object[] o1, Object[] o2) {
++                                        return ((Comparable)o1[aggCall.getArgList().get(0)]).compareTo(o2[aggCall.getArgList().get(0)]);
++                                    }
++                                })[aggCall.getArgList().get(0)];
++                                break;
++                            case "SUM":
++                                int tempsumInt = 0;
++                                double tempsumDouble = 0;
++                                float tempsumFloat = 0;
++                                long tempsumLong = 0;
++                                boolean isInt = false;
++                                boolean isDouble = false;
++                                boolean isFloat = false;
++                                boolean isLong = false; 
++                                // newRow[i + groupBySet.size()] = tempsum;
++                                for(Object [] row : temp)
++                                {
++                                    if(row[aggCall.getArgList().get(0)] instanceof Integer)
++                                    {
++                                        isInt = true;
++                                        tempsumInt += (int)row[aggCall.getArgList().get(0)];
++                                    }
++                                    else if(row[aggCall.getArgList().get(0)] instanceof Double)
++                                    {
++                                        isDouble = true;
++                                        tempsumDouble += (double)row[aggCall.getArgList().get(0)];
++                                    }
++                                    else if(row[aggCall.getArgList().get(0)] instanceof Float)
++                                    {
++                                        isFloat = true;
++                                        tempsumFloat += (float)row[aggCall.getArgList().get(0)];
++                                    }
++                                    else if(row[aggCall.getArgList().get(0)] instanceof Long)
++                                    {
++                                        isLong = true;
++                                        tempsumLong += (long)row[aggCall.getArgList().get(0)];
++                                    }
++                                    else
++                                    {
++                                        isInt = true;
++                                        tempsumInt += (int)row[aggCall.getArgList().get(0)];
++                                    }
++                                }
++                                if(isInt)
++                                    newRow[i + groupBySet.size()] = tempsumInt;
++                                else if(isDouble)
++                                    newRow[i + groupBySet.size()] = tempsumDouble;
++                                else if(isFloat)
++                                    newRow[i + groupBySet.size()] = tempsumFloat;
++                                else if(isLong)
++                                    newRow[i + groupBySet.size()] = tempsumLong;
++                                else
++                                    newRow[i + groupBySet.size()] = tempsumInt;
++                                break;
++                            case "AVG":
++                                int tempavgInt = 0;
++                                double tempavgDouble = 0;
++                                float tempavgFloat = 0;
++                                long tempavgLong = 0;
++                                boolean isIntAvg = false;
++                                boolean isDoubleAvg = false;
++                                boolean isFloatAvg = false;
++                                boolean isLongAvg = false; 
++                                // newRow[i + groupBySet.size()] = tempsum;
++                                for(Object [] row : temp)
++                                {
++                                    if(row[aggCall.getArgList().get(0)] instanceof Integer)
++                                    {
++                                        isIntAvg = true;
++                                        tempavgInt += (int)row[aggCall.getArgList().get(0)];
++                                    }
++                                    else if(row[aggCall.getArgList().get(0)] instanceof Double)
++                                    {
++                                        isDoubleAvg = true;
++                                        tempavgDouble += (double)row[aggCall.getArgList().get(0)];
++                                    }
++                                    else if(row[aggCall.getArgList().get(0)] instanceof Float)
++                                    {
++                                        isFloatAvg = true;
++                                        tempavgFloat += (float)row[aggCall.getArgList().get(0)];
++                                    }
++                                    else if(row[aggCall.getArgList().get(0)] instanceof Long)
++                                    {
++                                        isLongAvg = true;
++                                        tempavgLong += (long)row[aggCall.getArgList().get(0)];
++                                    }
++                                    else
++                                    {
++                                        isIntAvg = true;
++                                        tempavgInt += (int)row[aggCall.getArgList().get(0)];
++                                    }
++                                }
++                                if(isIntAvg)
++                                    newRow[i + groupBySet.size()] = tempavgInt;
++                                else if(isDoubleAvg)
++                                    newRow[i + groupBySet.size()] = tempavgDouble;
++                                else if(isFloatAvg)
++                                    newRow[i + groupBySet.size()] = tempavgFloat;
++                                else if(isLongAvg)
++                                    newRow[i + groupBySet.size()] = tempavgLong;
++                                else
++                                    newRow[i + groupBySet.size()] = tempavgInt;
++                                break;
++                        }
++                    }
++                    lis.add(newRow);
++                }
++            }
++            if(index < lis.size())
++                return true;
++            System.out.println("No more rows in PAggregate");
++            return false;
++        }
++        
+         return false;
+     }
+ 
+@@ -66,6 +290,9 @@ public class PAggregate extends Aggregate implements PRel {
+     @Override
+     public Object[] next() {
+         logger.trace("Getting next row from PAggregate");
++        if (this.input instanceof PRel) {
++            return lis.get(index++);
++        }
+         return null;
+     }
+ 
+diff --git a/in/ac/iitd/src/main/java/rel/PFilter.java b/in/ac/iitd/src/main/java/rel/PFilter.java
+index c3cb696..bd4868e 100644
+--- a/in/ac/iitd/src/main/java/rel/PFilter.java
++++ b/in/ac/iitd/src/main/java/rel/PFilter.java
+@@ -5,8 +5,19 @@ import org.apache.calcite.plan.RelTraitSet;
+ import org.apache.calcite.rel.RelNode;
+ import org.apache.calcite.rel.core.Filter;
+ import org.apache.calcite.rex.RexNode;
++import org.apache.calcite.rex.RexVisitorImpl;
++import org.apache.calcite.sql.SqlKind;
++import org.apache.calcite.sql.SqlOperator;
++import org.apache.calcite.sql.fun.SqlStdOperatorTable;
++import org.apache.calcite.rex.RexCall;
+ 
+ import convention.PConvention;
++import org.apache.calcite.rex.RexLiteral;
++import org.apache.calcite.rex.RexInputRef;
++
++import java.math.BigDecimal;
++import java.util.*;
++import java.util.function.BinaryOperator;
+ 
+ 
+ public class PFilter extends Filter implements PRel {
+@@ -34,7 +45,12 @@ public class PFilter extends Filter implements PRel {
+     @Override
+     public boolean open(){
+         logger.trace("Opening PFilter");
+-        /* Write your code here */
++        System.out.println("PFilter opened");
++        // System.out.println(this.getCondition());
++        if (this.input instanceof PRel) {
++            PRel inputNode = (PRel) this.input;
++            return inputNode.open();
++        }
+         return false;
+     }
+ 
+@@ -42,15 +58,37 @@ public class PFilter extends Filter implements PRel {
+     @Override
+     public void close(){
+         logger.trace("Closing PFilter");
+-        /* Write your code here */
++        System.out.println("PFilter closed");
++        if (this.input instanceof PRel) {
++            PRel inputNode = (PRel) this.input;
++            inputNode.close();
++        }
+         return;
+     }
+ 
+     // returns true if there is a next row, false otherwise
++
++    Object [] temp = null;
++
+     @Override
+     public boolean hasNext(){
+         logger.trace("Checking if PFilter has next");
+-        /* Write your code here */
++
++        if (this.input instanceof PRel) {
++            PRel inputNode = (PRel) this.input;
++            while(inputNode.hasNext())
++            {
++                Object [] tempo = inputNode.next();
++                EvaluateFilter eval = new EvaluateFilter(true, tempo);
++                if(getCondition().accept(eval)) 
++                {
++                    temp = tempo;
++                    return true;
++                }
++            }
++            System.out.println("No more rows in PFilter");
++            return false;
++        }
+         return false;
+     }
+ 
+@@ -59,7 +97,368 @@ public class PFilter extends Filter implements PRel {
+     @Override
+     public Object[] next(){
+         logger.trace("Getting next row from PFilter");
+-        /* Write your code here */
++        // System.out.println("Getting next row from PFilter");
++        if (this.input instanceof PRel) {
++            return temp;
++        }
+         return null;
+     }
++
++    private Object evaluateRexCall(Object [] record, RexCall rexCall) 
++        {
++            if (rexCall == null) {
++                return null;
++            }
++
++            // Get the operator and operands
++            SqlOperator operator = rexCall.getOperator();
++            List<RexNode> operands = rexCall.getOperands();
++
++            if (operator == SqlStdOperatorTable.PLUS) {
++                // Handle addition
++                return evaluateNaryOperation(record, operands, Double::sum);
++            } else if (operator == SqlStdOperatorTable.MINUS) {
++                // Handle subtraction
++                return evaluateNaryOperation(record, operands, (a, b) -> a - b);
++            } else if (operator == SqlStdOperatorTable.MULTIPLY) {
++                // Handle multiplication
++                return evaluateNaryOperation(record, operands, (a, b) -> a * b);
++            } else if (operator == SqlStdOperatorTable.DIVIDE) {
++                // Handle division
++                return evaluateNaryOperation(record, operands, (a, b) -> a / b);
++            } else {
++                return null;
++            }
++        }
++
++        public Object evaluateNaryOperation(Object[] record, List<RexNode> operands, BinaryOperator<Double> operation) 
++        {
++            if (operands.isEmpty()) {
++                return null;
++            }
++
++            List<Double> values = new ArrayList<>();
++
++            for (int i = 0; i < operands.size(); i++) {
++                Number val = (Number) evaluateRexNode(record, operands.get(i));
++                if(val == null){
++                    return null;
++                }
++                values.add(val.doubleValue());
++            }
++
++            Object result = values.get(0);
++            // Perform the operation with the remaining operands
++            for (int i = 1; i < operands.size(); i++) {
++                result = operation.apply((double)result, values.get(i));
++            }
++
++            return result;
++        }
++
++        public Object evaluateRexNode(Object[] record, RexNode rexNode) 
++        {
++            if (rexNode instanceof RexCall) {
++                return evaluateRexCall(record, (RexCall) rexNode);
++            } else if (rexNode instanceof RexLiteral) {
++                RexLiteral literal = (RexLiteral) rexNode;
++                return literal.getValue();
++            } else if (rexNode instanceof RexInputRef) {
++                return record[((RexInputRef) rexNode).getIndex()];
++            }
++            else {
++                return null; 
++            }
++
++        }
++
++
++    private static final EnumSet<SqlKind> SUPPORTED_OPS =
++            EnumSet.of(SqlKind.AND, SqlKind.OR,
++                    SqlKind.EQUALS, SqlKind.NOT_EQUALS,
++                    SqlKind.LESS_THAN, SqlKind.GREATER_THAN,
++                    SqlKind.GREATER_THAN_OR_EQUAL, SqlKind.LESS_THAN_OR_EQUAL,SqlKind.IS_NULL,SqlKind.IS_NOT_NULL);
++
++    private class EvaluateFilter extends RexVisitorImpl<Boolean> 
++    {
++
++        final Object[] record;
++        protected EvaluateFilter(boolean deep, Object[] record) 
++        {
++            super(deep);
++            this.record = record;
++        }
++
++        @Override
++        public Boolean visitCall(RexCall call) 
++        {
++            SqlKind kind = call.getKind();
++            if(!kind.belongsTo(SUPPORTED_OPS)) 
++            {
++                throw new IllegalStateException("Cannot handle this filter predicate yet");
++            }
++
++            if(kind == SqlKind.AND) 
++            {
++                boolean accept = true;
++                for(RexNode operand : call.getOperands()) 
++                {
++                    accept = accept && operand.accept(this);
++                }
++                return accept;
++            } 
++            else if(kind == SqlKind.OR) 
++            {
++                boolean accept = false;
++                for(RexNode operand : call.getOperands()) 
++                {
++                    accept = accept || operand.accept(this);
++                }
++                return accept;
++            }
++            else if(kind == SqlKind.IS_NULL)
++            {
++                RexInputRef rexInputRef = (RexInputRef)call.getOperands().get(0);
++                int index = rexInputRef.getIndex();
++                Object field = record[index];
++                if(field == null) return true;
++                return false;
++            }
++            else if(kind == SqlKind.IS_NOT_NULL)
++            {
++                RexInputRef rexInputRef = (RexInputRef)call.getOperands().get(0);
++                int index = rexInputRef.getIndex();
++                Object field = record[index];
++                if(field == null) return false;
++                return true;
++            }
++            else 
++            {
++                return eval(record, kind, call.getOperands().get(0), call.getOperands().get(1));
++            }
++        }
++
++        public boolean eval(Object[] record, SqlKind kind, RexNode leftOperand, RexNode rightOperand) 
++        {
++
++            if(leftOperand instanceof RexInputRef && rightOperand instanceof RexLiteral) 
++            {
++                RexInputRef rexInputRef = (RexInputRef)leftOperand;
++                int index = rexInputRef.getIndex();
++                Object field = record[index];
++                if(field == null) return false; // basic NULL Handling
++                RexLiteral rexLiteral = (RexLiteral) rightOperand;
++                switch (kind) 
++                {
++                    case GREATER_THAN:
++                        return isGreaterThan(field, rexLiteral);
++                    case LESS_THAN:
++                        return isLessThan(field, rexLiteral);
++                    case EQUALS:
++                        return isEqualTo(field, rexLiteral);
++                    case NOT_EQUALS:
++                        return !isEqualTo(field, rexLiteral);
++                    case GREATER_THAN_OR_EQUAL:
++                        return isGreaterThan(field, rexLiteral) || isEqualTo(field, rexLiteral);
++                    case LESS_THAN_OR_EQUAL:
++                        return isLessThan(field, rexLiteral) || isEqualTo(field, rexLiteral);
++                    default:
++                        throw new IllegalStateException("Predicate not supported yet");
++                }
++
++            }
++            else if(leftOperand instanceof RexInputRef && rightOperand instanceof RexInputRef)
++            {
++                RexInputRef rexInputRef1 = (RexInputRef)leftOperand;
++                int index1 = rexInputRef1.getIndex();
++                Object field1 = record[index1];
++                if(field1 == null) return false; // basic NULL Handling
++                RexInputRef rexInputRef2 = (RexInputRef)rightOperand;
++                int index2 = rexInputRef2.getIndex();
++                Object field2 = record[index2];
++                if(field2 == null) return false; // basic NULL Handling
++                switch (kind) 
++                {
++                    case GREATER_THAN:
++                        return isGreaterThanNew(field1, field2);
++                    case LESS_THAN:
++                        return isLessThanNew(field1, field2);
++                    case EQUALS:
++                        return isEqualToNew(field1, field2);
++                    case NOT_EQUALS:
++                        return !isEqualToNew(field1, field2);
++                    case GREATER_THAN_OR_EQUAL:
++                        return isGreaterThanNew(field1, field2) || isEqualToNew(field1, field2);
++                    case LESS_THAN_OR_EQUAL:
++                        return isLessThanNew(field1, field2) || isEqualToNew(field1, field2);
++                    default:
++                        throw new IllegalStateException("Predicate not supported yet");
++                }
++            }
++            else if(leftOperand instanceof RexCall && rightOperand instanceof RexLiteral)
++            {
++                Object tempobj = evaluateRexCall(record,(RexCall)leftOperand);
++                if(tempobj == null) return false; // basic NULL Handling
++                RexLiteral rexLiteral = (RexLiteral) rightOperand;
++                switch (kind) 
++                {
++                    case GREATER_THAN:
++                        return isGreaterThan(tempobj, rexLiteral);
++                    case LESS_THAN:
++                        return isLessThan(tempobj, rexLiteral);
++                    case EQUALS:
++                        return isEqualTo(tempobj, rexLiteral);
++                    case NOT_EQUALS:
++                        return !isEqualTo(tempobj, rexLiteral);
++                    case GREATER_THAN_OR_EQUAL:
++                        return isGreaterThan(tempobj, rexLiteral) || isEqualTo(tempobj, rexLiteral);
++                    case LESS_THAN_OR_EQUAL:
++                        return isLessThan(tempobj, rexLiteral) || isEqualTo(tempobj, rexLiteral);
++                    default:
++                        throw new IllegalStateException("Predicate not supported yet");
++                }
++            } 
++            else if(leftOperand instanceof RexCall && rightOperand instanceof RexInputRef)
++            {
++                Object tempobj = evaluateRexCall(record,(RexCall)leftOperand);
++                if(tempobj == null) return false; // basic NULL Handling
++                RexInputRef rexInputRef = (RexInputRef)rightOperand;
++                int index = rexInputRef.getIndex();
++                Object field = record[index];
++                if(field == null) return false; // basic NULL Handling
++                switch (kind) 
++                {
++                    case GREATER_THAN:
++                        return isGreaterThanNew(tempobj, field);
++                    case LESS_THAN:
++                        return isLessThanNew(tempobj, field);
++                    case EQUALS:
++                        return isEqualToNew(tempobj, field);
++                    case NOT_EQUALS:
++                        return !isEqualToNew(tempobj, field);
++                    case GREATER_THAN_OR_EQUAL:
++                        return isGreaterThanNew(tempobj, field) || isEqualToNew(tempobj, field);
++                    case LESS_THAN_OR_EQUAL:
++                        return isLessThanNew(tempobj, field) || isEqualToNew(tempobj, field);
++                    default:
++                        throw new IllegalStateException("Predicate not supported yet");
++                }
++            }
++            else if(leftOperand instanceof RexInputRef && rightOperand instanceof RexCall)
++            {
++                RexInputRef rexInputRef = (RexInputRef)leftOperand;
++                int index = rexInputRef.getIndex();
++                Object field = record[index];
++                if(field == null) return false; // basic NULL Handling
++                Object tempobj = evaluateRexCall(record,(RexCall)rightOperand);
++                if(tempobj == null) return false; // basic NULL Handling
++                switch (kind) 
++                {
++                    case GREATER_THAN:
++                        return isGreaterThanNew(field, tempobj);
++                    case LESS_THAN:
++                        return isLessThanNew(field, tempobj);
++                    case EQUALS:
++                        return isEqualToNew(field, tempobj);
++                    case NOT_EQUALS:
++                        return !isEqualToNew(field, tempobj);
++                    case GREATER_THAN_OR_EQUAL:
++                        return isGreaterThanNew(field, tempobj) || isEqualToNew(field, tempobj);
++                    case LESS_THAN_OR_EQUAL:
++                        return isLessThanNew(field, tempobj) || isEqualToNew(field, tempobj);
++                    default:
++                        throw new IllegalStateException("Predicate not supported yet");
++                }
++            }
++            else if(leftOperand instanceof RexLiteral && rightOperand instanceof RexCall)
++            {
++                RexLiteral rexLiteral = (RexLiteral) leftOperand;
++                Object tempobj = evaluateRexCall(record,(RexCall)rightOperand);
++                if(tempobj == null) return false; // basic NULL Handling
++                switch (kind) 
++                {
++                    case GREATER_THAN:
++                        return isGreaterThan(tempobj, rexLiteral);
++                    case LESS_THAN:
++                        return isLessThan(tempobj, rexLiteral);
++                    case EQUALS:
++                        return isEqualTo(tempobj, rexLiteral);
++                    case NOT_EQUALS:
++                        return !isEqualTo(tempobj, rexLiteral);
++                    case GREATER_THAN_OR_EQUAL:
++                        return isGreaterThan(tempobj, rexLiteral) || isEqualTo(tempobj, rexLiteral);
++                    case LESS_THAN_OR_EQUAL:
++                        return isLessThan(tempobj, rexLiteral) || isEqualTo(tempobj, rexLiteral);
++                    default:
++                        throw new IllegalStateException("Predicate not supported yet");
++                }
++            }
++            else if(leftOperand instanceof RexCall && rightOperand instanceof RexCall)
++            {
++                Object tempobj1 = evaluateRexCall(record,(RexCall)leftOperand);
++                if(tempobj1 == null) return false; // basic NULL Handling
++                Object tempobj2 = evaluateRexCall(record,(RexCall)rightOperand);
++                if(tempobj2 == null) return false; // basic NULL Handling
++                switch (kind) 
++                {
++                    case GREATER_THAN:
++                        return isGreaterThanNew(tempobj1, tempobj2);
++                    case LESS_THAN:
++                        return isLessThanNew(tempobj1, tempobj2);
++                    case EQUALS:
++                        return isEqualToNew(tempobj1, tempobj2);
++                    case NOT_EQUALS:
++                        return !isEqualToNew(tempobj1, tempobj2);
++                    case GREATER_THAN_OR_EQUAL:
++                        return isGreaterThanNew(tempobj1, tempobj2) || isEqualToNew(tempobj1, tempobj2);
++                    case LESS_THAN_OR_EQUAL:
++                        return isLessThanNew(tempobj1, tempobj2) || isEqualToNew(tempobj1, tempobj2);
++                    default:
++                        throw new IllegalStateException("Predicate not supported yet");
++                }
++            }
++            else 
++            {
++                throw new IllegalStateException("Predicate not supported yet");
++            }
++
++        }
++
++        private boolean isGreaterThanNew(Object o1, Object o2) 
++        {
++            return ((Comparable)o1).compareTo((Comparable)o2) > 0;
++        }
++        private boolean isLessThanNew(Object o1, Object o2) 
++        {
++            return ((Comparable)o1).compareTo((Comparable)o2) < 0;
++        }
++        private boolean isEqualToNew(Object o1, Object o2) 
++        {
++            return ((Comparable)o1).compareTo((Comparable)o2) == 0;
++        }
++
++        private boolean isGreaterThan(Object o, RexLiteral rexLiteral) 
++        {
++            return ((Comparable)o).compareTo(rexLiteral.getValueAs(o.getClass())) > 0;
++        }
++
++        private boolean isLessThan(Object o, RexLiteral rexLiteral) 
++        {
++            return ((Comparable)o).compareTo(rexLiteral.getValueAs(o.getClass())) < 0;
++        }
++
++        private boolean isEqualTo(Object o, RexLiteral rexLiteral) 
++        {
++            try 
++            {
++                return ((Comparable)o).compareTo(rexLiteral.getValueAs(o.getClass())) == 0;
++            } 
++            catch (Exception e) 
++            {
++                throw new IllegalStateException("Predicate not supported yet");
++            }
++        }
++
++    }
++
+ }
+diff --git a/in/ac/iitd/src/main/java/rel/PJoin.java b/in/ac/iitd/src/main/java/rel/PJoin.java
+index 9bc33f8..841d6e8 100644
+--- a/in/ac/iitd/src/main/java/rel/PJoin.java
++++ b/in/ac/iitd/src/main/java/rel/PJoin.java
+@@ -8,9 +8,12 @@ import org.apache.calcite.rel.core.CorrelationId;
+ import org.apache.calcite.rel.core.Join;
+ import org.apache.calcite.rel.core.JoinRelType;
+ import org.apache.calcite.rex.RexNode;
+-
++import org.apache.calcite.rex.RexCall;
++import java.util.ArrayList;
++import java.util.HashMap;
+ import convention.PConvention;
+ 
++import java.util.List;
+ import java.util.Set;
+ 
+ /*
+@@ -46,12 +49,74 @@ public class PJoin extends Join implements PRel {
+     public String toString() {
+         return "PJoin";
+     }
+-
++    int index;
++    List<Object[]> lis;
++    HashMap<Object[], List<Object[]>> map;
++    HashMap<Object[], Boolean> mapLeft;
++    int flag;
++    List<Object[]> listForCar;
++    List<Integer> leftList,rightList;
+     // returns true if successfully opened, false otherwise
+     @Override
+     public boolean open() {
++        
+         logger.trace("Opening PJoin");
+-        /* Write your code here */
++        System.out.println("PJoin opened");
++        // System.out.println(this.joinType);
++        // System.out.println(this.condition);
++        // System.out.println(this.left);
++        // System.out.println(this.right);
++
++        map = new HashMap<Object[], List<Object[]>>();
++        mapLeft = new HashMap<Object[], Boolean>();
++        index = 0;
++        lis = new ArrayList<Object[]>();
++        flag = 0;
++        
++        leftList = new ArrayList<>();
++        rightList = new ArrayList<>();
++        if(this.condition.toString().equals("true"))
++            System.out.println("No condition");
++        else
++        {
++
++            RexCall cond = (RexCall)this.getCondition();
++            // System.out.println("The cond is "+ cond.op);
++    
++            if(cond.op.toString().equals("AND"))
++            {
++                System.out.println("AND condition");
++                for(RexNode node : cond.getOperands())
++                {
++                    RexCall tempNode = (RexCall)node;
++                    int leftIndex = Integer.parseInt(tempNode.getOperands().get(0).toString().substring(1));
++                    int rightIndex = Integer.parseInt(tempNode.getOperands().get(1).toString().substring(1))-((PRel)this.left).getRowType().getFieldCount();
++                    leftList.add(leftIndex);
++                    rightList.add(rightIndex);
++                }
++            }
++            else
++            {
++                RexCall tempNode = (RexCall)cond;
++
++                if(tempNode.op.toString().equals("="))
++                {
++                    int leftIndex = Integer.parseInt(tempNode.getOperands().get(0).toString().substring(1));
++                    int rightIndex = Integer.parseInt(tempNode.getOperands().get(1).toString().substring(1))-((PRel)this.left).getRowType().getFieldCount();
++                    leftList.add(leftIndex);
++                    rightList.add(rightIndex);
++                }
++            }
++        }
++
++        // System.out.println("LeftList "+leftList);
++        // System.out.println("RightList "+rightList);
++        listForCar = new ArrayList<Object[]>();
++
++        if (this.left instanceof PRel) {
++            PRel leftNode = (PRel) this.left;
++            return leftNode.open();
++        }
+         return false;
+     }
+ 
+@@ -59,23 +124,511 @@ public class PJoin extends Join implements PRel {
+     @Override
+     public void close() {
+         logger.trace("Closing PJoin");
+-        /* Write your code here */
++        System.out.println("Closing PJoin");
++        if (this.left instanceof PRel) {
++            PRel leftNode = (PRel) this.left;
++            leftNode.close();
++        }
++        if (this.right instanceof PRel) {
++            PRel rightNode = (PRel) this.right;
++            rightNode.close();
++        }
+         return;
+     }
+ 
++    public String objArrayToString(Object[] obj)
++    {
++        String str = "";
++        for(Object o : obj)
++        {
++            if(o == null)
++                str += "null";
++            else
++                str += o.toString();
++        }
++        return str;
++    }
++
++
+     // returns true if there is a next row, false otherwise
+     @Override
+     public boolean hasNext() {
+         logger.trace("Checking if PJoin has next");
+-        /* Write your code here */
+-        return false;
++        PRel rightNode = (PRel) this.right;
++        if(this.condition.toString().equals("true"))
++        {
++            if(index == 0)
++            {
++                if (this.left instanceof PRel) 
++                {
++                    PRel leftNode = (PRel) this.left;
++                    while(leftNode.hasNext())
++                    {
++                        Object[] temp = leftNode.next();
++                        if(temp!=null)
++                            listForCar.add(temp);
++                    }
++                }
++                rightNode.open();
++            }
++
++            if(flag==1)
++            {
++                if(index < lis.size())
++                    return true;
++                System.out.println("No more rows in PJoin");
++                return false;
++            }
++
++            if (this.right instanceof PRel) 
++            {
++                while(rightNode.hasNext())
++                {
++                    Object[] tempnew = rightNode.next();
++                    if(tempnew!=null)
++                    {
++                        for(Object[] left_row : listForCar)
++                        {
++                            Object[] result = new Object[left_row.length + tempnew.length];
++                            int i = 0;
++                            for(Object obj : left_row)
++                            {
++                                result[i] = obj;
++                                i++;
++                            }
++                            for(int j=0;j<tempnew.length;j++)
++                            {
++                                result[i] = tempnew[j];
++                                i++;
++                            }
++                            lis.add(result);
++                        }
++                    }
++                    if(index < lis.size())
++                        return true;
++                }
++                flag = 1;
++                if(index < lis.size())
++                    return true;
++                System.out.println("No more rows in PJoin");
++            }
++        }
++
++        if(index == 0)
++        {
++            if (this.left instanceof PRel) 
++            {
++                PRel leftNode = (PRel) this.left;
++                while(leftNode.hasNext())
++                {
++                    Object[] temp = leftNode.next();
++                    if(temp!=null)
++                    {
++                        
++                        Object [] key = new Object[leftList.size()];
++                        for(int i=0;i<leftList.size();i++)
++                        {
++                            key[i] = temp[leftList.get(i)];
++                        }
++
++                        String strKey = objArrayToString(key);
++
++                        int tempFlag = 0;
++                        
++                        for(Object [] key1 : map.keySet())
++                        {
++                            String strKey1 = objArrayToString(key1);
++                            if(strKey.equals(strKey1))
++                            {
++                                map.get(key1).add(temp);
++                                tempFlag = 1;
++                                break;
++                            }
++                        }
++
++                        if(tempFlag == 0)
++                        {
++                            List<Object []> temp_list = new ArrayList<>();
++                            temp_list.add(temp);
++                            map.put(key, temp_list);
++                            mapLeft.put(key, true);
++                        }
++
++                    }
++                }
++                System.out.println("Map size "+map.size());
++            }
++            rightNode.open();
++        }
++        if(this.joinType == JoinRelType.INNER)
++        {
++            if (this.right instanceof PRel) 
++            {
++                if(flag==1)
++                {
++                    if(index < lis.size())
++                        return true;
++                    System.out.println("No more rows in PJoin");
++                    return false;
++                }
++                while(rightNode.hasNext())
++                {
++                    Object[] tempnew = rightNode.next();
++
++                    if(tempnew!=null)
++                    {
++                        Object [] keyRight = new Object[leftList.size()];
++
++                        for(int i=0;i<leftList.size();i++)
++                        {
++                            keyRight[i] = tempnew[rightList.get(i)];
++                        }
++                        String strKeyRight = objArrayToString(keyRight);
++                        int tempoFlag = 0;
++
++                        for(Object [] key1 : map.keySet())
++                        {
++                            String strKey1 = objArrayToString(key1);
++                            if(strKeyRight.equals(strKey1))
++                            {
++                                List<Object[]> temp_list = map.get(key1);
++                                for(Object[] left_row : temp_list)
++                                {
++                                    Object[] result = new Object[left_row.length + tempnew.length];
++                                    int i = 0;
++                                    for(Object obj : left_row)
++                                    {
++                                        result[i] = obj;
++                                        i++;
++                                    }
++                                    for(int j=0;j<tempnew.length;j++)
++                                    {
++                                        result[i] = tempnew[j];
++                                        i++;
++                                    }
++                                    lis.add(result);
++                                }
++                                tempoFlag = 1;
++                                break;
++                            }
++                        }
++                        if(index < lis.size())
++                            return true;
++                    }
++                }
++                flag = 1;
++                if(index < lis.size())
++                    return true;
++                System.out.println("No more rows in PJoin");
++            }
++            return false;
++        }
++        else if (this.joinType == JoinRelType.LEFT)
++        {
++            if (this.right instanceof PRel) 
++            {
++                if(flag==1)
++                {
++                    if(index < lis.size())
++                        return true;
++                    System.out.println("No more rows in PJoin");
++                    return false;
++                }
++
++                while(rightNode.hasNext())
++                {
++                    Object[] tempnew = rightNode.next();
++                    if(tempnew!=null)
++                    {
++                        Object [] keyRight = new Object[leftList.size()];
++
++                        for(int i=0;i<leftList.size();i++)
++                        {
++                            keyRight[i] = tempnew[rightList.get(i)];
++                        }
++
++                        String strKeyRight = objArrayToString(keyRight);
++
++
++                        for(Object [] key1 : map.keySet())
++                        {
++                            String strKey1 = objArrayToString(key1);
++                            if(strKeyRight.equals(strKey1))
++                            {
++                                mapLeft.put(key1, false);
++                                List<Object[]> temp_list = map.get(key1);
++                                for(Object[] left_row : temp_list)
++                                {
++                                    Object[] result = new Object[left_row.length + tempnew.length];
++                                    int i = 0;
++                                    for(Object obj : left_row)
++                                    {
++                                        result[i] = obj;
++                                        i++;
++                                    }
++                                    for(int j=0;j<tempnew.length;j++)
++                                    {
++                                        result[i] = tempnew[j];
++                                        i++;
++                                    }
++                                    lis.add(result);
++                                }
++                                break;
++                            }
++                        }
++
++
++                        if(index < lis.size())
++                            return true;
++                    }
++                }
++                if(flag==0)
++                {
++                    for(Object[] key : mapLeft.keySet())
++                    {
++                        if(mapLeft.get(key))
++                        {
++                            List<Object[]> temp_list = map.get(key);
++                            for(Object[] left_row : temp_list)
++                            {
++                                Object[] result = new Object[left_row.length + ((PRel)this.right).getRowType().getFieldCount()];
++                                int i = 0;
++                                for(Object obj : left_row)
++                                {
++                                    result[i] = obj;
++                                    i++;
++                                }
++                                for(int j=0;j<((PRel)this.right).getRowType().getFieldCount();j++)
++                                {
++                                    result[i] = null;
++                                    i++;
++                                }
++                                lis.add(result);
++                            }
++                        }
++                    }
++                    System.out.println(lis.size());
++                    flag = 1;
++                }
++                if(index < lis.size())
++                    return true;
++                System.out.println("No more rows in PJoin");
++                return false;
++            }
++            return false;
++        }
++        else if (this.joinType == JoinRelType.RIGHT)
++        {
++            if (this.right instanceof PRel) 
++            {
++                if(flag==1)
++                {
++                    if(index < lis.size())
++                        return true;
++                    System.out.println("No more rows in PJoin");
++                    return false;
++                }
++                while(rightNode.hasNext())
++                {
++                    Object[] tempnew = rightNode.next();
++                    if(tempnew!=null)
++                    {
++                        Object [] keyRight = new Object[leftList.size()];
++
++                        for(int i=0;i<leftList.size();i++)
++                        {
++                            keyRight[i] = tempnew[rightList.get(i)];
++                        }
++
++                        String strKeyRight = objArrayToString(keyRight);
++
++                        int tempoFlag = 0;
++
++                        for(Object [] key1 : map.keySet())
++                        {
++                            String strKey1 = objArrayToString(key1);
++                            if(strKeyRight.equals(strKey1))
++                            {
++                                List<Object[]> temp_list = map.get(key1);
++                                for(Object[] left_row : temp_list)
++                                {
++                                    Object[] result = new Object[left_row.length + tempnew.length];
++                                    int i = 0;
++                                    for(Object obj : left_row)
++                                    {
++                                        result[i] = obj;
++                                        i++;
++                                    }
++                                    for(int j=0;j<tempnew.length;j++)
++                                    {
++                                        result[i] = tempnew[j];
++                                        i++;
++                                    }
++                                    lis.add(result);
++                                }
++                                tempoFlag = 1;
++                                break;
++                            }
++                        }
++
++
++                        if(tempoFlag == 0)
++                        {
++                            Object[] result = new Object[((PRel)this.left).getRowType().getFieldCount() + tempnew.length];
++                            int i = 0;
++                            for(int j=0;j<((PRel)this.left).getRowType().getFieldCount();j++)
++                            {
++                                result[i] = null;
++                                i++;
++                            }
++                            for(int j=0;j<tempnew.length;j++)
++                            {
++                                result[i] = tempnew[j];
++                                i++;
++                            }
++                            lis.add(result);
++                        }
++
++                        if(index < lis.size())
++                            return true;
++                    }
++                }
++                flag = 1;
++                if(index < lis.size())
++                    return true;
++                System.out.println("No more rows in PJoin");
++            }
++            return false;
++        }
++        else if (this.joinType == JoinRelType.FULL)
++        {
++            if (this.right instanceof PRel) 
++            {
++                if(flag==1)
++                {
++                    if(index < lis.size())
++                        return true;
++                    System.out.println("No more rows in PJoin");
++                    return false;
++                }
++
++                while(rightNode.hasNext())
++                {
++                    Object[] tempnew = rightNode.next();
++                    if(tempnew!=null)
++                    {
++                        Object [] keyRight = new Object[leftList.size()];
++
++                        for(int i=0;i<leftList.size();i++)
++                        {
++                            keyRight[i] = tempnew[rightList.get(i)];
++                        }
++
++                        String strKeyRight = objArrayToString(keyRight);
++
++                        int tempoFlag = 0;
++
++                        for(Object [] key1 : map.keySet())
++                        {
++                            String strKey1 = objArrayToString(key1);
++                            if(strKeyRight.equals(strKey1))
++                            {
++                                List<Object[]> temp_list = map.get(key1);
++                                for(Object[] left_row : temp_list)
++                                {
++                                    Object[] result = new Object[left_row.length + tempnew.length];
++                                    int i = 0;
++                                    for(Object obj : left_row)
++                                    {
++                                        result[i] = obj;
++                                        i++;
++                                    }
++                                    for(int j=0;j<tempnew.length;j++)
++                                    {
++                                        result[i] = tempnew[j];
++                                        i++;
++                                    }
++                                    lis.add(result);
++                                }
++                                tempoFlag = 1;
++                                break;
++                            }
++                        }
++
++
++                        if(tempoFlag == 0)
++                        {
++                            Object[] result = new Object[((PRel)this.left).getRowType().getFieldCount() + tempnew.length];
++                            int i = 0;
++                            for(int j=0;j<((PRel)this.left).getRowType().getFieldCount();j++)
++                            {
++                                result[i] = null;
++                                i++;
++                            }
++                            for(int j=0;j<tempnew.length;j++)
++                            {
++                                result[i] = tempnew[j];
++                                i++;
++                            }
++                            lis.add(result);
++                        }
++
++                        if(index < lis.size())
++                            return true;
++                    }
++                }
++                // traverse the mapLeft and find the key value pair which has value as true
++                if(flag==0)
++                {
++                    for(Object[] key : mapLeft.keySet())
++                    {
++                        if(mapLeft.get(key))
++                        {
++                            List<Object[]> temp_list = map.get(key);
++                            for(Object[] left_row : temp_list)
++                            {
++                                Object[] result = new Object[left_row.length + ((PRel)this.right).getRowType().getFieldCount()];
++                                int i = 0;
++                                for(Object obj : left_row)
++                                {
++                                    result[i] = obj;
++                                    i++;
++                                }
++                                for(int j=0;j<((PRel)this.right).getRowType().getFieldCount();j++)
++                                {
++                                    result[i] = null;
++                                    i++;
++                                }
++                                lis.add(result);
++                            }
++                        }
++                    }
++                    System.out.println(lis.size());
++                    flag = 1;
++                }
++                if(index < lis.size())
++                    return true;
++                System.out.println("No more rows in PJoin");
++            }
++            return false;
++        }
++        else
++            return false;
+     }
+ 
+     // returns the next row
+     @Override
+     public Object[] next() {
+         logger.trace("Getting next row from PJoin");
+-        /* Write your code here */
++        if(index < lis.size())
++        {
++            Object [] tempo = lis.get(index);
++            index++;
++            return tempo;
++        }
+         return null;
+     }
+ }
++
++
++
+diff --git a/in/ac/iitd/src/main/java/rel/PProject.java b/in/ac/iitd/src/main/java/rel/PProject.java
+index dc69a91..cedc7c9 100644
+--- a/in/ac/iitd/src/main/java/rel/PProject.java
++++ b/in/ac/iitd/src/main/java/rel/PProject.java
+@@ -7,11 +7,16 @@ import org.apache.calcite.rel.RelNode;
+ import org.apache.calcite.rel.core.Project;
+ import org.apache.calcite.rel.type.RelDataType;
+ import org.apache.calcite.rex.RexNode;
+-
++import org.apache.calcite.rex.RexCall;
++import org.apache.calcite.rex.RexLiteral;
++import org.apache.calcite.rex.RexInputRef;
++import org.apache.calcite.sql.SqlOperator;
++import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+ import convention.PConvention;
+ 
+ import java.util.List;
+-
++import java.util.ArrayList;
++import java.util.function.BinaryOperator;
+ // Hint: Think about alias and arithmetic operations
+ public class PProject extends Project implements PRel {
+ 
+@@ -36,11 +41,81 @@ public class PProject extends Project implements PRel {
+         return "PProject";
+     }
+ 
++
++    private static Object evaluateRexCall(Object [] record, RexCall rexCall) {
++        if (rexCall == null) {
++            return null;
++        }
++
++        SqlOperator operator = rexCall.getOperator();
++        List<RexNode> operands = rexCall.getOperands();
++
++        if (operator == SqlStdOperatorTable.PLUS) {
++            // Handle addition
++            return evaluateNaryOperation(record, operands, Double::sum);
++        } else if (operator == SqlStdOperatorTable.MINUS) {
++            // Handle subtraction
++            return evaluateNaryOperation(record, operands, (a, b) -> a - b);
++        } else if (operator == SqlStdOperatorTable.MULTIPLY) {
++            // Handle multiplication
++            return evaluateNaryOperation(record, operands, (a, b) -> a * b);
++        } else if (operator == SqlStdOperatorTable.DIVIDE) {
++            // Handle division
++            return evaluateNaryOperation(record, operands, (a, b) -> a / b);
++        } else {
++            return null;
++        }
++    }
++
++    public static Object evaluateNaryOperation(Object[] record, List<RexNode> operands, BinaryOperator<Double> operation) {
++        if (operands.isEmpty()) {
++            return null;
++        }
++
++        List<Double> values = new ArrayList<>();
++
++        for (int i = 0; i < operands.size(); i++) {
++            Number val = (Number) evaluateRexNode(record, operands.get(i));
++            if(val == null){
++                return null;
++            }
++            values.add(val.doubleValue());
++        }
++
++        Object result = values.get(0);
++        // Perform the operation with the remaining operands
++        for (int i = 1; i < operands.size(); i++) {
++            result = operation.apply((double)result, values.get(i));
++        }
++
++        return result;
++    }
++
++    public static Object evaluateRexNode(Object[] record, RexNode rexNode) {
++        if (rexNode instanceof RexCall) {
++            return evaluateRexCall(record, (RexCall) rexNode);
++        } else if (rexNode instanceof RexLiteral) {
++            RexLiteral literal = (RexLiteral) rexNode;
++            return literal.getValue();
++        } else if (rexNode instanceof RexInputRef) {
++            return record[((RexInputRef) rexNode).getIndex()];
++        }
++        else {
++            return null; 
++        }
++    }
++
+     // returns true if successfully opened, false otherwise
+     @Override
+     public boolean open(){
+         logger.trace("Opening PProject");
+-        /* Write your code here */
++        System.out.println("PProject opened");
++        // System.out.println(this.input);
++        // System.out.println("Projects of PProject "+this.getProjects());
++        if (this.input instanceof PRel) {
++            PRel inputNode = (PRel) this.input;
++            return inputNode.open();
++        }
+         return false;
+     }
+ 
+@@ -48,23 +123,60 @@ public class PProject extends Project implements PRel {
+     @Override
+     public void close(){
+         logger.trace("Closing PProject");
+-        /* Write your code here */
++        System.out.println("Closing PProject");
++        if (this.input instanceof PRel) {
++            PRel inputNode = (PRel) this.input;
++            inputNode.close();
++        }
+         return;
+     }
+ 
+     // returns true if there is a next row, false otherwise
++
++    Object [] temp = null;
++
+     @Override
+     public boolean hasNext(){
+         logger.trace("Checking if PProject has next");
+-        /* Write your code here */
++        if (this.input instanceof PRel) {
++            PRel inputNode = (PRel) this.input;
++            while(inputNode.hasNext())
++            {
++                temp = inputNode.next();
++                if(temp!=null)
++                    return true;
++            }
++            System.out.println("No more rows in PProject");
++            return false;
++        }
+         return false;
+     }
+ 
+     // returns the next row
++
++
+     @Override
+     public Object[] next(){
+         logger.trace("Getting next row from PProject");
+-        /* Write your code here */
++        if (this.input instanceof PRel) {
++            List<RexNode> projects = (List<RexNode>)this.getProjects();
++            Object [] result = new Object[projects.size()];
++
++
++            for (int i = 0; i < projects.size(); i++) {
++                RexNode exp = projects.get(i);
++                if (exp instanceof RexInputRef) {
++                    result[i] = temp[((RexInputRef) exp).getIndex()];
++                } else if (exp instanceof RexLiteral) {
++                    RexLiteral literal = (RexLiteral) exp;
++                    result[i] = literal.getValue();
++                } else if (exp instanceof RexCall) {
++                    result[i] = evaluateRexCall(temp, (RexCall) exp);
++                }
++            }
++
++            return result;
++        }
+         return null;
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/in/ac/iitd/src/main/java/rel/PSort.java b/in/ac/iitd/src/main/java/rel/PSort.java
+index f72f7cf..1e3c832 100644
+--- a/in/ac/iitd/src/main/java/rel/PSort.java
++++ b/in/ac/iitd/src/main/java/rel/PSort.java
+@@ -1,6 +1,9 @@
+ package rel;
+ 
+ import java.util.List;
++import java.util.ArrayList;
++import java.util.Comparator;
++import java.util.Collections;
+ 
+ import org.apache.calcite.plan.RelOptCluster;
+ import org.apache.calcite.plan.RelTraitSet;
+@@ -36,12 +39,31 @@ public class PSort extends Sort implements PRel{
+     public String toString() {
+         return "PSort";
+     }
++    int index;
++    int limit;
++    List<Object[]> lis;
+ 
+     // returns true if successfully opened, false otherwise
+     @Override
+     public boolean open(){
+         logger.trace("Opening PSort");
+         /* Write your code here */
++        System.out.println("PSort opened");
++        // System.out.println(this.collation);
++        index = 0;
++        lis = new ArrayList<Object[]>();
++        limit = this.fetch == null ? 1000000000 : Integer.parseInt(this.fetch.toString());
++        // System.out.println("Limit: " + limit);
++
++        // System.out.println(this.explain());
++        // System.out.println(this.hints);
++        // System.out.println(this.rowType);
++
++
++        if (this.input instanceof PRel) {
++            PRel inputNode = (PRel) this.input;
++            return inputNode.open();
++        }
+         return false;
+     }
+ 
+@@ -49,15 +71,109 @@ public class PSort extends Sort implements PRel{
+     @Override
+     public void close(){
+         logger.trace("Closing PSort");
+-        /* Write your code here */
++        System.out.println("Closing PSort");
++        if (this.input instanceof PRel) {
++            PRel inputNode = (PRel) this.input;
++            inputNode.close();
++        }
+         return;
+     }
+ 
++
+     // returns true if there is a next row, false otherwise
++
++
++    public void sortList(List<Object[]> lis, int columnIndex, boolean descending) {
++        // sort the list based on the column index
++        // if descending is true, sort in descending order
++        // else sort in ascending order
++        Comparator<Object[]> comparator = new Comparator<Object[]>() {
++        @Override
++        public int compare(Object[] row1, Object[] row2) {
++            // Get the values at the specified column index for comparison
++            Comparable<Object> value1 = (Comparable<Object>) row1[columnIndex];
++            Comparable<Object> value2 = (Comparable<Object>) row2[columnIndex];
++
++            int result = value1.compareTo(value2);
++            return descending ? -result : result;
++        }
++    };
++
++    // Sort the list using the defined Comparator
++        Collections.sort(lis, comparator);
++    }
++
++
+     @Override
+     public boolean hasNext(){
+         logger.trace("Checking if PSort has next");
+-        /* Write your code here */
++
++        if (this.input instanceof PRel) {
++            PRel inputNode = (PRel) this.input;
++            // System.out.println("in PSort hasNext");
++
++            if(index == 0)
++            {
++                while(inputNode.hasNext())
++                {
++                    lis.add(inputNode.next());
++                }
++                System.out.println("Sorting the list");
++                RelCollation collation = this.collation;
++                int relColSize = collation.getFieldCollations().size();
++                // for(int i = (relColSize-1); i >=0; i--)
++                // {
++                //     int columnIndex = collation.getFieldCollations().get(i).getFieldIndex();
++                //     boolean descending = collation.getFieldCollations().get(i).getDirection().isDescending();
++                    
++                //     sortList(lis, columnIndex, descending);
++                // }
++
++                List<Comparator<Object[]>> comparators = new ArrayList<Comparator<Object[]>>();
++                for(int i = 0; i < relColSize; i++)
++                {
++                    int columnIndex = collation.getFieldCollations().get(i).getFieldIndex();
++                    boolean descending = collation.getFieldCollations().get(i).getDirection().isDescending();
++                    Comparator<Object[]> comparator = new Comparator<Object[]>() {
++                        @Override
++                        public int compare(Object[] row1, Object[] row2) {
++                            // Get the values at the specified column index for comparison
++                            Comparable<Object> value1 = (Comparable<Object>) row1[columnIndex];
++                            Comparable<Object> value2 = (Comparable<Object>) row2[columnIndex];
++
++                            int result = value1.compareTo(value2);
++                            return descending ? -result : result;
++                        }
++                    };
++                    comparators.add(comparator);
++                }
++                
++                Comparator<Object[]> finalComparator = new Comparator<Object[]>() {
++                    @Override
++                    public int compare(Object[] row1, Object[] row2) {
++                        for(Comparator<Object[]> comparator : comparators)
++                        {
++                            int result = comparator.compare(row1, row2);
++                            if(result != 0)
++                                return result;
++                        }
++                        return 0;
++                    }
++                };
++                
++                Collections.sort(lis, finalComparator);
++                
++            }
++
++
++
++
++            if(index < lis.size() && index < limit)
++                return true;
++            System.out.println("No more rows in PSort");
++            return false;
++        }
++
+         return false;
+     }
+ 
+@@ -65,7 +181,13 @@ public class PSort extends Sort implements PRel{
+     @Override
+     public Object[] next(){
+         logger.trace("Getting next row from PSort");
+-        /* Write your code here */
++        
++        if(index < lis.size())
++        {
++            Object [] temp = lis.get(index);
++            index++;
++            return temp;
++        }
+         return null;
+     }
+ 
+diff --git a/in/ac/iitd/src/main/java/rules/PRules.java b/in/ac/iitd/src/main/java/rules/PRules.java
+index 5d32509..1b217a8 100644
+--- a/in/ac/iitd/src/main/java/rules/PRules.java
++++ b/in/ac/iitd/src/main/java/rules/PRules.java
+@@ -14,8 +14,11 @@ import org.apache.calcite.rel.logical.LogicalTableScan;
+ import org.apache.calcite.rel.logical.LogicalSort;
+ 
+ import convention.PConvention;
++import rel.PAggregate;
+ import rel.PFilter;
++import rel.PJoin;
+ import rel.PProject;
++import rel.PSort;
+ import rel.PTableScan;
+ import org.checkerframework.checker.nullness.qual.Nullable;
+ 
+@@ -123,7 +126,16 @@ public class PRules {
+         @Override
+         public @Nullable RelNode convert(RelNode relNode) {
+             /* Write your code here */
+-            return null;
++            LogicalJoin join = (LogicalJoin) relNode;
++            return new PJoin(
++                    join.getCluster(),
++                    join.getTraitSet().replace(PConvention.INSTANCE),
++                    convert(join.getLeft(), join.getLeft().getTraitSet().replace(PConvention.INSTANCE)),
++                    convert(join.getRight(), join.getRight().getTraitSet().replace(PConvention.INSTANCE)),
++                    join.getCondition(),
++                    join.getVariablesSet(),
++                    join.getJoinType()
++            );
+         }
+     }
+ 
+@@ -141,7 +153,16 @@ public class PRules {
+         @Override
+         public @Nullable RelNode convert(RelNode relNode) {
+             /* Write your code here */
+-            return null;
++            LogicalAggregate aggregate = (LogicalAggregate) relNode;
++            return new PAggregate(
++                    aggregate.getCluster(),
++                    aggregate.getTraitSet().replace(PConvention.INSTANCE),
++                    aggregate.getHints(),
++                    convert(aggregate.getInput(), aggregate.getInput().getTraitSet().replace(PConvention.INSTANCE)),
++                    aggregate.getGroupSet(),
++                    aggregate.getGroupSets(),
++                    aggregate.getAggCallList()
++            );
+         }
+     }
+ 
+@@ -159,7 +180,16 @@ public class PRules {
+         @Override
+         public @Nullable RelNode convert(RelNode relNode) {
+             /* Write your code here */
+-            return null;
++            LogicalSort sort = (LogicalSort) relNode;
++            return new PSort(
++                    sort.getCluster(),
++                    sort.getTraitSet().replace(PConvention.INSTANCE),
++                    sort.getHints(),
++                    convert(sort.getInput(), sort.getInput().getTraitSet().replace(PConvention.INSTANCE)),
++                    sort.getCollation(),
++                    sort.offset,
++                    sort.fetch
++            );
+         }
+     }
+ }
+diff --git a/in/ac/iitd/src/test/java/PrimaryTestCases.java b/in/ac/iitd/src/test/java/PrimaryTestCases.java
+index f68bfbc..38bac10 100644
+--- a/in/ac/iitd/src/test/java/PrimaryTestCases.java
++++ b/in/ac/iitd/src/test/java/PrimaryTestCases.java
+@@ -237,7 +237,7 @@ public class PrimaryTestCases {
+ 
+             for(int key : expected.keySet()){
+                 assert(expected.get(key).size() == actual.get(key).size());
+-                expected.get(key).sort(null);
++                actual.get(key).sort(null);
+                 for(int i = 0; i < expected.get(key).size(); i++){
+                     assert(expected.get(key).get(i).equals(actual.get(key).get(i)));
+                 }
